@@ -1272,9 +1272,9 @@ isFetching(filters?: MaybeRefDeep<QueryFilters<readonly unknown[]>>): number;
 
 Defined in: [packages/vue-query/src/queryClient.ts:67](https://github.com/TanStack/query/blob/main/packages/vue-query/src/queryClient.ts#L67)
 
-Returns the number of queries in the cache that are currently fetching, optionally
-matching a set of filters. This includes background-fetching, loading new pages, and
-loading more infinite query results.
+Returns the number of queries in the cache matching a set of filters. By default,
+counts queries that are currently fetching, including background fetches, new pages,
+and more infinite query results. Set `filters.fetchStatus` to count paused or idle queries.
 
 #### Parameters
 
@@ -1282,14 +1282,14 @@ loading more infinite query results.
 
 `MaybeRefDeep`\<[`QueryFilters`](../interfaces/QueryFilters.md)\<readonly `unknown`[]\>\> = `{}`
 
-Narrows down which fetching queries are counted. Without filters, every
-fetching query is counted.
+Narrows down which queries are counted. `fetchStatus` defaults to
+`'fetching'` when omitted or `undefined`.
 
 #### Returns
 
 `number`
 
-The number of matching queries whose `fetchStatus` is `'fetching'`.
+The number of matching queries with the requested `fetchStatus`.
 
 #### Example
 
