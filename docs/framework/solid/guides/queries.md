@@ -94,4 +94,11 @@ function Todos() {
 
 [//]: # 'Example4'
 [//]: # 'Materials'
+
+## Reconciling data
+
+Use the `reconcile` option on `useQuery` or `useInfiniteQuery` to preserve references between data updates. You can supply a string key for Solid's reconciliation or a function that receives `(oldData, newData)` and returns the data to store.
+
+Reconciliation runs when defined observer data changes, including updates from `select` or `queryClient.setQueryData`. Status-only updates with the same data reference reuse the reconciled result. Loading and error results without data do not call the function. When switching queries, reconciliation starts with `oldData` set to `undefined` so data from different query keys is not merged.
+
 [//]: # 'Materials'
