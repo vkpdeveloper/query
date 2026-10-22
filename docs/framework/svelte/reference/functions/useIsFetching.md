@@ -20,8 +20,8 @@ fetching in the background (useful for app-wide loading indicators).
 
 [`QueryFilters`](../interfaces/QueryFilters.md)\<readonly `unknown`[]\>
 
-[QueryFilters](../interfaces/QueryFilters.md) to narrow down which queries to count. Omit to count every fetching
-query.
+[QueryFilters](../interfaces/QueryFilters.md) to narrow down which queries to count. `fetchStatus` defaults to
+`'fetching'`; use `'paused'` or `'idle'` to count queries with those statuses.
 
 <a id="filters-properties"></a>
 
@@ -47,7 +47,7 @@ be used.
 
 `ReactiveValue`\<`number`\>
 
-A reactive value — read `.current` to get how many matching queries are currently fetching.
+A reactive value — read `.current` to get how many queries match the filters and fetch status.
 
 ## Examples
 

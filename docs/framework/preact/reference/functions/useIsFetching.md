@@ -20,7 +20,8 @@ the background (useful for app-wide loading indicators).
 
 [`QueryFilters`](../interfaces/QueryFilters.md)\<readonly `unknown`[]\>
 
-The [QueryFilters](../interfaces/QueryFilters.md) to narrow down the matched queries.
+The [QueryFilters](../interfaces/QueryFilters.md) to narrow down the matched queries. `fetchStatus` defaults to
+`'fetching'`; use `'paused'` or `'idle'` to count queries with those statuses.
 
 <a id="filters-properties"></a>
 
@@ -46,8 +47,7 @@ be used.
 
 `number`
 
-Will be the `number` of the queries that your application is currently loading or fetching in the
-background.
+The number of queries matching the filters and fetch status (defaults to `'fetching'`).
 
 ## Examples
 

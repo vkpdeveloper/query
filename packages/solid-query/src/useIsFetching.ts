@@ -7,11 +7,11 @@ import type { Accessor } from 'solid-js'
 /**
  * The `useIsFetching` primitive returns the `number` of the queries that your application is loading or fetching
  * in the background (useful for app-wide loading indicators).
- * @param filters - An accessor returning the {@link QueryFilters} to narrow down the matched queries.
+ * @param filters - An accessor returning the {@link QueryFilters}. `fetchStatus` defaults to `'fetching'`;
+ * use `'paused'` or `'idle'` to count queries with those statuses.
  * @param queryClient - An accessor for a custom `QueryClient`. Otherwise, the one from the nearest context
  * will be used.
- * @returns An accessor for the `number` of the queries that your application is currently loading or fetching
- * in the background.
+ * @returns An accessor for the number of queries matching the filters and fetch status.
  * @example
  * ```tsx
  * import { useIsFetching } from '@tanstack/solid-query'
