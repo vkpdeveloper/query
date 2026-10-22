@@ -26,7 +26,7 @@ import type {
 
 /**
  * Applies the `reconcile` option when writing a new observer result into the store.
- * @param store - The current result in the store.
+ * @param oldData - The current query's data in the store.
  * @param result - The new observer result.
  * @param reconcileOption - `false` to replace the data, a function that merges the old and new
  * data, or the key used by Solid's `reconcile` to match array items.
@@ -34,7 +34,7 @@ import type {
  * @returns The result to store, with its data reconciled.
  */
 function reconcileFn<TData, TError>(
-  store: QueryObserverResult<TData, TError>,
+  oldData: TData | undefined,
   result: QueryObserverResult<TData, TError>,
   reconcileOption:
     | string
@@ -42,13 +42,13 @@ function reconcileFn<TData, TError>(
     | ((oldData: TData | undefined, newData: TData) => TData),
   queryHash?: string,
 ): QueryObserverResult<TData, TError> {
-  if (reconcileOption === false) return result
+  if (reconcileOption === false || result.data === undefined) return result
   if (typeof reconcileOption === 'function') {
-    const newData = reconcileOption(store.data, result.data as TData)
+    const newData = reconcileOption(oldData, result.data)
     return { ...result, data: newData } as typeof result
   }
   let data = result.data
-  if (store.data === undefined) {
+  if (oldData === undefined) {
     try {
       data = structuredClone(data)
     } catch (error) {
@@ -64,7 +64,7 @@ function reconcileFn<TData, TError>(
       }
     }
   }
-  const newData = reconcile(data, { key: reconcileOption })(store.data)
+  const newData = reconcile(data, { key: reconcileOption })(oldData)
   return { ...result, data: newData } as typeof result
 }
 
@@ -164,8 +164,12 @@ export function useBaseQuery<
   )
 
   let observerResult = observer().getOptimisticResult(defaultedOptions())
-  const [state, setState] =
-    createStore<QueryObserverResult<TData, TError>>(observerResult)
+  let previousQuery = observer().getCurrentQuery()
+  let previousData = observerResult.data
+  let previousDataUpdateCount = previousQuery.state.dataUpdateCount
+  const [state, setState] = createStore<QueryObserverResult<TData, TError>>({
+    ...observerResult,
+  })
 
   const createServerSubscriber = (
     resolve: (
@@ -213,13 +217,25 @@ export function useBaseQuery<
    * @param res - The observer result to write.
    */
   function setStateWithReconciliation(res: typeof observerResult) {
-    const opts = observer().options
+    const obs = observer()
+    const opts = obs.options
+    const query = obs.getCurrentQuery()
+    const queryChanged = query !== previousQuery
+    const dataChanged =
+      queryChanged ||
+      res.data !== previousData ||
+      query.state.dataUpdateCount !== previousDataUpdateCount
+    previousQuery = query
+    previousData = res.data
+    previousDataUpdateCount = query.state.dataUpdateCount
     // @ts-expect-error - Reconcile option is not correctly typed internally
     const reconcileOptions = opts.reconcile
 
     setState((store) => {
+      // Status updates must retain the reconciled data, which can differ from the source.
+      if (!dataChanged) return { ...res, data: store.data } as typeof res
       return reconcileFn(
-        store,
+        queryChanged ? undefined : store.data,
         res,
         reconcileOptions === undefined ? false : reconcileOptions,
         opts.queryHash,
@@ -245,6 +261,9 @@ export function useBaseQuery<
         if (v?.hydrationData) {
           const { hydrationData, ...rest } = v
           v = rest
+        } else if (!isServer) {
+          // A resource promise can settle after the observer has switched queries.
+          v = observerResult
         }
         setStateWithReconciliation(v)
       },
@@ -352,6 +371,7 @@ export function useBaseQuery<
           unsubscribe()
         }
         const newObserver = new Observer(c, defaultedOptions())
+        observerResult = newObserver.getOptimisticResult(defaultedOptions())
         setObserver(newObserver)
         unsubscribe = createClientSubscriber()
       },
@@ -393,7 +413,8 @@ export function useBaseQuery<
       [observer, defaultedOptions],
       ([obs, opts]) => {
         obs.setOptions(opts)
-        setStateWithReconciliation(obs.getOptimisticResult(opts))
+        observerResult = obs.getOptimisticResult(opts)
+        setStateWithReconciliation(observerResult)
         refetch()
       },
       { defer: true },
