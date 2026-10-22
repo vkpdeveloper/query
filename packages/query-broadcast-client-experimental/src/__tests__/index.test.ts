@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/query-core'
+import { QueryClient, QueryObserver } from '@tanstack/query-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryKey, sleep } from '@tanstack/query-test-utils'
 import { broadcastQueryClient } from '..'
@@ -164,6 +164,91 @@ describe('broadcastQueryClient', () => {
       expect(queryClient.getQueryState(existingKey)?.status).toBe('success')
     })
 
+    it('should preserve an observed error when an empty "added" message arrives', async () => {
+      const existingKey = queryKey()
+      const error = new Error('down')
+      await expect(
+        queryClient.query({
+          queryKey: existingKey,
+          queryFn: () => Promise.reject(error),
+          retry: false,
+        }),
+      ).rejects.toBe(error)
+
+      const observer = new QueryObserver(queryClient, {
+        queryKey: existingKey,
+        enabled: false,
+      })
+      const unsubscribe = observer.subscribe(() => {})
+      const previousState = queryClient.getQueryState(existingKey)!
+      expect(previousState.errorUpdatedAt).toBeGreaterThan(0)
+
+      broadcastQueryClient({ queryClient })
+      const remoteClient = new QueryClient()
+      const remoteQuery = remoteClient.getQueryCache().build(remoteClient, {
+        queryKey: existingKey,
+      })
+
+      try {
+        lastCreatedChannel.onmessage?.({
+          type: 'added',
+          queryHash: remoteQuery.queryHash,
+          queryKey: existingKey,
+          state: remoteQuery.state,
+        })
+
+        expect(queryClient.getQueryState(existingKey)).toBe(previousState)
+        expect(observer.getCurrentResult()).toMatchObject({
+          status: 'error',
+          fetchStatus: 'idle',
+          error,
+          isPending: false,
+        })
+      } finally {
+        unsubscribe()
+        remoteClient.clear()
+      }
+    })
+
+    it('should preserve an in-flight query when an empty "added" message arrives', async () => {
+      const existingKey = queryKey()
+      const fetchPromise = queryClient.query({
+        queryKey: existingKey,
+        queryFn: async () => {
+          await sleep(0)
+          return 'resolved'
+        },
+      })
+      const previousState = queryClient.getQueryState(existingKey)!
+      expect(previousState.fetchStatus).toBe('fetching')
+
+      broadcastQueryClient({ queryClient })
+      const remoteClient = new QueryClient()
+      const remoteQuery = remoteClient.getQueryCache().build(remoteClient, {
+        queryKey: existingKey,
+      })
+
+      try {
+        lastCreatedChannel.onmessage?.({
+          type: 'added',
+          queryHash: remoteQuery.queryHash,
+          queryKey: existingKey,
+          state: remoteQuery.state,
+        })
+
+        expect(queryClient.getQueryState(existingKey)).toBe(previousState)
+        await expect(fetchPromise).resolves.toBe('resolved')
+        expect(queryClient.getQueryState(existingKey)).toMatchObject({
+          status: 'success',
+          fetchStatus: 'idle',
+          data: 'resolved',
+        })
+      } finally {
+        await fetchPromise
+        remoteClient.clear()
+      }
+    })
+
     it('should adopt an "added" message\'s state for an existing query that has no data yet', () => {
       const existingKey = queryKey()
 
@@ -184,11 +269,65 @@ describe('broadcastQueryClient', () => {
         type: 'added',
         queryHash: existingQuery.queryHash,
         queryKey: existingKey,
-        state: { status: 'success', data: { value: 'from other tab' } },
+        state: {
+          status: 'success',
+          data: { value: 'from other tab' },
+          dataUpdatedAt: Date.now(),
+          errorUpdatedAt: 0,
+        },
       })
       expect(queryClient.getQueryData(existingKey)).toStrictEqual({
         value: 'from other tab',
       })
+    })
+
+    it('should adopt a settled error from an "added" message for an existing query without data', async () => {
+      const existingKey = queryKey()
+      const existingQuery = queryCache.build(queryClient, {
+        queryKey: existingKey,
+      })
+      const remoteClient = new QueryClient()
+      const error = new Error('down')
+      await expect(
+        remoteClient.query({
+          queryKey: existingKey,
+          queryFn: () => Promise.reject(error),
+          retry: false,
+        }),
+      ).rejects.toBe(error)
+      const remoteState = remoteClient.getQueryState(existingKey)!
+
+      broadcastQueryClient({ queryClient })
+      lastCreatedChannel.onmessage?.({
+        type: 'added',
+        queryHash: existingQuery.queryHash,
+        queryKey: existingKey,
+        state: remoteState,
+      })
+
+      expect(existingQuery.state).toStrictEqual(remoteState)
+      expect(existingQuery.state.status).toBe('error')
+      remoteClient.clear()
+    })
+
+    it('should build a missing query from an empty "added" message', () => {
+      const remoteClient = new QueryClient()
+      const remoteQuery = remoteClient.getQueryCache().build(remoteClient, {
+        queryKey: queryKey(),
+      })
+
+      broadcastQueryClient({ queryClient })
+      lastCreatedChannel.onmessage?.({
+        type: 'added',
+        queryHash: remoteQuery.queryHash,
+        queryKey: remoteQuery.queryKey,
+        state: remoteQuery.state,
+      })
+
+      expect(queryCache.get(remoteQuery.queryHash)?.state).toStrictEqual(
+        remoteQuery.state,
+      )
+      remoteClient.clear()
     })
   })
 
