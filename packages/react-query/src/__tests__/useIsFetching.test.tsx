@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render } from '@testing-library/react'
 import * as React from 'react'
 import { queryKey, sleep } from '@tanstack/query-test-utils'
-import { QueryCache, QueryClient, useIsFetching, useQuery } from '..'
+import {
+  QueryCache,
+  QueryClient,
+  onlineManager,
+  useIsFetching,
+  useQuery,
+} from '..'
 import { renderWithClient, setActTimeout } from './utils'
 import type { Query } from '..'
 
@@ -184,6 +190,54 @@ describe('useIsFetching', () => {
 
     // at no point should we have isFetching: 2
     expect(isFetchingArray).toStrictEqual(expect.not.arrayContaining([2]))
+  })
+
+  it('should track paused, fetching and idle queries with fetchStatus filters', async () => {
+    const queryClient = new QueryClient()
+    const key = queryKey()
+    const queryFn = vi.fn<() => Promise<string>>(() =>
+      sleep(10).then(() => 'data'),
+    )
+    const online = vi.spyOn(onlineManager, 'isOnline').mockReturnValue(false)
+
+    function Page() {
+      useQuery({ queryKey: key, queryFn })
+
+      const paused = useIsFetching({ queryKey: key, fetchStatus: 'paused' })
+      const fetching = useIsFetching({ queryKey: key, fetchStatus: 'fetching' })
+      const idle = useIsFetching({ queryKey: key, fetchStatus: 'idle' })
+      const defaultFetching = useIsFetching({ queryKey: key })
+
+      return (
+        <div>
+          paused: {paused}, fetching: {fetching}, idle: {idle}, default:{' '}
+          {defaultFetching}
+        </div>
+      )
+    }
+
+    const rendered = renderWithClient(queryClient, <Page />)
+
+    expect(
+      rendered.getByText('paused: 1, fetching: 0, idle: 0, default: 0'),
+    ).toBeInTheDocument()
+    expect(queryFn).not.toHaveBeenCalled()
+
+    online.mockReturnValue(true)
+    queryClient.getQueryCache().onOnline()
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(
+      rendered.getByText('paused: 0, fetching: 1, idle: 0, default: 1'),
+    ).toBeInTheDocument()
+    expect(queryFn).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(
+      rendered.getByText('paused: 0, fetching: 0, idle: 1, default: 0'),
+    ).toBeInTheDocument()
+    expect(queryClient.getQueryData(key)).toBe('data')
   })
 
   it('should show the correct fetching state when mounted after a query', async () => {

@@ -876,9 +876,9 @@ isFetching<TQueryFilters extends QueryFilters<any> = QueryFilters<readonly unkno
 
 Defined in: [packages/query-core/src/queryClient.ts:151](https://github.com/TanStack/query/blob/main/packages/query-core/src/queryClient.ts#L151)
 
-Returns the number of queries in the cache that are currently fetching, optionally
-matching a set of filters. This includes background-fetching, loading new pages, and
-loading more infinite query results.
+Returns the number of queries in the cache matching a set of filters. By default,
+counts queries that are currently fetching, including background fetches, new pages,
+and more infinite query results. Set `filters.fetchStatus` to count paused or idle queries.
 
 #### Type Parameters
 
@@ -892,14 +892,14 @@ loading more infinite query results.
 
 `TQueryFilters`
 
-Narrows down which fetching queries are counted. Without filters, every
-fetching query is counted.
+Narrows down which queries are counted. `fetchStatus` defaults to
+`'fetching'` when omitted or `undefined`.
 
 #### Returns
 
 `number`
 
-The number of matching queries whose `fetchStatus` is `'fetching'`.
+The number of matching queries with the requested `fetchStatus`.
 
 #### Example
 

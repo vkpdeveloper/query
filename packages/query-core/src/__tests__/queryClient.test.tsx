@@ -409,6 +409,47 @@ describe('queryClient', () => {
   })
 
   describe('isFetching', () => {
+    it.each([
+      { fetchStatus: 'fetching' as const, count: 1 },
+      { fetchStatus: 'paused' as const, count: 2 },
+      { fetchStatus: 'idle' as const, count: 3 },
+      { fetchStatus: undefined, count: 1 },
+    ])(
+      'should count queries with fetchStatus $fetchStatus',
+      ({ fetchStatus, count }) => {
+        const key = queryKey()
+
+        for (const [status, length] of [
+          ['fetching', 1],
+          ['paused', 2],
+          ['idle', 3],
+        ] as const) {
+          for (let index = 0; index < length; index++) {
+            queryCache
+              .build(queryClient, { queryKey: [...key, status, index] })
+              .setState({ fetchStatus: status })
+          }
+        }
+
+        queryCache
+          .build(queryClient, { queryKey: queryKey() })
+          .setState({ fetchStatus: 'paused' })
+
+        expect(queryClient.isFetching({ queryKey: key, fetchStatus })).toBe(
+          count,
+        )
+        expect(
+          queryClient.isFetching({
+            queryKey: key,
+            fetchStatus,
+            predicate: (query) => query.queryKey.at(-1) === 0,
+          }),
+        ).toBe(1)
+        expect(queryClient.isFetching()).toBe(1)
+        expect(queryClient.isFetching({ queryKey: key })).toBe(1)
+      },
+    )
+
     it('should return length of fetching queries', async () => {
       expect(queryClient.isFetching()).toBe(0)
 
