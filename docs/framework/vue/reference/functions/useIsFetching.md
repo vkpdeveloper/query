@@ -25,7 +25,8 @@ getter if the filters themselves depend on other reactive state.
 
 [`UseIsFetchingFilters`](../type-aliases/UseIsFetchingFilters.md) = `{}`
 
-The [QueryFilters](../interfaces/QueryFilters.md) to narrow down the matched queries.
+The [QueryFilters](../interfaces/QueryFilters.md) to narrow down the matched queries. `fetchStatus` defaults
+to `'fetching'`; use `'paused'` or `'idle'` to count queries with those statuses.
 
 ### queryClient?
 
@@ -38,8 +39,7 @@ will be used.
 
 `Ref`\<`number`\>
 
-A `ref` to the `number` of the queries that your application is currently loading or fetching in
-the background.
+A `ref` to the number of queries matching the filters and fetch status.
 
 ## Examples
 

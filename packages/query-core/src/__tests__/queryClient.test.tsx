@@ -409,6 +409,56 @@ describe('queryClient', () => {
   })
 
   describe('isFetching', () => {
+    it.each(['fetching', 'paused', 'idle'] as const)(
+      'should count queries matching fetchStatus %s and other filters',
+      (fetchStatus) => {
+        const key = queryKey()
+        const query = queryCache.build(queryClient, { queryKey: key })
+        query.setState({ fetchStatus })
+        queryCache
+          .build(queryClient, { queryKey: [...key, 'child'] })
+          .setState({ fetchStatus })
+        queryCache
+          .build(queryClient, { queryKey: queryKey() })
+          .setState({ fetchStatus })
+
+        expect(queryClient.isFetching({ fetchStatus })).toBe(3)
+        expect(queryClient.isFetching({ queryKey: key, fetchStatus })).toBe(2)
+        expect(
+          queryClient.isFetching({ queryKey: key, exact: true, fetchStatus }),
+        ).toBe(1)
+        expect(
+          queryClient.isFetching({
+            queryKey: key,
+            fetchStatus,
+            predicate: (cachedQuery) =>
+              cachedQuery.queryHash === query.queryHash,
+          }),
+        ).toBe(1)
+        expect(
+          queryClient.isFetching({ fetchStatus, predicate: () => false }),
+        ).toBe(0)
+        expect(
+          queryClient.isFetching({ queryKey: queryKey(), fetchStatus }),
+        ).toBe(0)
+      },
+    )
+
+    it('should default an omitted or undefined fetchStatus to fetching', () => {
+      const key = queryKey()
+
+      for (const fetchStatus of ['fetching', 'paused', 'idle'] as const) {
+        queryCache
+          .build(queryClient, { queryKey: [...key, fetchStatus] })
+          .setState({ fetchStatus })
+      }
+
+      expect(queryClient.isFetching()).toBe(1)
+      expect(queryClient.isFetching({})).toBe(1)
+      expect(queryClient.isFetching({ fetchStatus: undefined })).toBe(1)
+      expect(queryClient.isFetching({ queryKey: key })).toBe(1)
+    })
+
     it('should return length of fetching queries', async () => {
       expect(queryClient.isFetching()).toBe(0)
 

@@ -22,7 +22,8 @@ in the background (useful for app-wide loading indicators).
 
 `Accessor`\<[`QueryFilters`](../interfaces/QueryFilters.md)\<readonly `unknown`[]\>\>
 
-An accessor returning the [QueryFilters](../interfaces/QueryFilters.md) to narrow down the matched queries.
+An accessor returning the [QueryFilters](../interfaces/QueryFilters.md). `fetchStatus` defaults to `'fetching'`;
+use `'paused'` or `'idle'` to count queries with those statuses.
 
 <a id="filters-properties"></a>
 
@@ -41,8 +42,7 @@ will be used.
 
 `Accessor`\<`number`\>
 
-An accessor for the `number` of the queries that your application is currently loading or fetching
-in the background.
+An accessor for the number of queries matching the filters and fetch status.
 
 ## Example
 

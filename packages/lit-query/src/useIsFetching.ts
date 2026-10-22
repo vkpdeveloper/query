@@ -111,17 +111,18 @@ class IsFetchingController extends BaseController<number> {
 
 /**
  * Creates a Lit reactive controller that tracks how many matching queries are
- * currently fetching.
+ * currently fetching by default.
  *
  * When `filters` is a function, it is re-read during host updates so the count
  * can follow reactive host state. If `queryClient` is omitted, the controller
  * resolves the client from the nearest connected `QueryClientProvider`.
  * @param host - The Lit reactive controller host that owns the cache
  * subscription.
- * @param filters - Query filters, or a getter that returns query filters.
+ * @param filters - Query filters, or a getter returning them. `fetchStatus` defaults to `'fetching'`;
+ * use `'paused'` or `'idle'` to count queries with those statuses.
  * @param queryClient - Optional explicit query client. Provide this for
  * controllers that should not resolve a client from Lit context.
- * @returns An accessor for the current number of matching fetching queries.
+ * @returns An accessor for the current number of queries matching the filters and fetch status.
  * @example
  * ```ts
  * import { LitElement, html } from 'lit'

@@ -186,6 +186,45 @@ describe('useIsFetching', () => {
     expect(isFetchingArray).toStrictEqual(expect.not.arrayContaining([2]))
   })
 
+  it('should track fetchStatus filters as queries change status', async () => {
+    const queryClient = new QueryClient()
+    const key = queryKey()
+    const query = queryClient.getQueryCache().build(queryClient, {
+      queryKey: key,
+    })
+    query.setState({ fetchStatus: 'paused' })
+
+    function Page() {
+      const fetching = useIsFetching({ queryKey: key })
+      const paused = useIsFetching({ queryKey: key, fetchStatus: 'paused' })
+      const idle = useIsFetching({ queryKey: key, fetchStatus: 'idle' })
+
+      return (
+        <div>
+          fetching: {fetching}, paused: {paused}, idle: {idle}
+        </div>
+      )
+    }
+
+    const rendered = renderWithClient(queryClient, <Page />)
+
+    expect(
+      rendered.getByText('fetching: 0, paused: 1, idle: 0'),
+    ).toBeInTheDocument()
+
+    query.setState({ fetchStatus: 'fetching' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(
+      rendered.getByText('fetching: 1, paused: 0, idle: 0'),
+    ).toBeInTheDocument()
+
+    query.setState({ fetchStatus: 'idle' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(
+      rendered.getByText('fetching: 0, paused: 0, idle: 1'),
+    ).toBeInTheDocument()
+  })
+
   it('should show the correct fetching state when mounted after a query', async () => {
     const queryClient = new QueryClient()
     const key = queryKey()

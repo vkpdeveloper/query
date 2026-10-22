@@ -135,12 +135,12 @@ export class QueryClient {
   }
 
   /**
-   * Returns the number of queries in the cache that are currently fetching, optionally
-   * matching a set of filters. This includes background-fetching, loading new pages, and
-   * loading more infinite query results.
-   * @param filters - Narrows down which fetching queries are counted. Without filters, every
-   * fetching query is counted.
-   * @returns The number of matching queries whose `fetchStatus` is `'fetching'`.
+   * Returns the number of queries in the cache matching the filters. By default, counts queries
+   * that are currently fetching, including background-fetching and loading infinite query pages.
+   * Set `filters.fetchStatus` to `'paused'` or `'idle'` to count queries with those statuses.
+   * @param filters - Narrows down which queries are counted. `fetchStatus` defaults to `'fetching'`,
+   * including when it is explicitly `undefined`.
+   * @returns The number of queries matching the filters and fetch status.
    * @example
    * ```ts
    * if (queryClient.isFetching()) {
@@ -151,8 +151,10 @@ export class QueryClient {
   isFetching<TQueryFilters extends QueryFilters<any> = QueryFilters>(
     filters?: TQueryFilters,
   ): number {
-    return this.#queryCache.findAll({ ...filters, fetchStatus: 'fetching' })
-      .length
+    return this.#queryCache.findAll({
+      ...filters,
+      fetchStatus: filters?.fetchStatus ?? 'fetching',
+    }).length
   }
 
   /**
