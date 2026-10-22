@@ -7,6 +7,8 @@ title: broadcastQueryClient (Experimental)
 
 `broadcastQueryClient` is a utility for broadcasting and syncing the state of your queryClient between browser tabs/windows with the same origin.
 
+A newly created query in another tab does not overwrite an existing local query with its empty initial state, preserving local errors and ongoing fetches. Queries added with a data or error timestamp greater than zero can still supply state to an existing local query without data.
+
 ## Installation
 
 This utility comes as a separate package and is available under the `'@tanstack/query-broadcast-client-experimental'` import.
