@@ -849,6 +849,202 @@ describe('useQuery', () => {
     expect(states).toHaveLength(1)
   })
 
+  it('should reconcile new data once and preserve it during status and option updates', async () => {
+    const key = queryKey()
+    const inputs: Array<[number | undefined, number | undefined]> = []
+    let count = 0
+
+    function Page() {
+      const [staleTime, setStaleTime] = createSignal(0)
+      const state = useQuery(() => ({
+        queryKey: key,
+        queryFn: () => sleep(10).then(() => ({ value: ++count })),
+        staleTime: staleTime(),
+        reconcile: (oldData, newData) => {
+          inputs.push([oldData?.value, newData.value])
+          return { value: newData.value * 10 }
+        },
+      }))
+
+      return (
+        <div>
+          <button onClick={() => state.refetch()}>refetch</button>
+          <button onClick={() => setStaleTime(Infinity)}>change options</button>
+          <span>data: {state.data?.value}</span>
+          <span>fetchStatus: {state.fetchStatus}</span>
+        </div>
+      )
+    }
+
+    const rendered = renderWithClient(queryClient, () => <Page />)
+
+    await vi.advanceTimersByTimeAsync(10)
+    expect(rendered.getByText('data: 10')).toBeInTheDocument()
+
+    fireEvent.click(rendered.getByRole('button', { name: 'change options' }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(rendered.getByText('data: 10')).toBeInTheDocument()
+
+    fireEvent.click(rendered.getByRole('button', { name: 'refetch' }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(rendered.getByText('fetchStatus: fetching')).toBeInTheDocument()
+    expect(rendered.getByText('data: 10')).toBeInTheDocument()
+
+    await vi.advanceTimersByTimeAsync(10)
+    expect(rendered.getByText('data: 20')).toBeInTheDocument()
+    expect(rendered.getByText('fetchStatus: idle')).toBeInTheDocument()
+
+    queryClient.setQueryData(key, { value: 3 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(rendered.getByText('data: 30')).toBeInTheDocument()
+    expect(inputs).toStrictEqual([
+      [undefined, 1],
+      [10, 2],
+      [20, 3],
+    ])
+  })
+
+  it('should reconcile cached data without mixing different query keys', async () => {
+    const key = queryKey()
+    const inputs: Array<[string | undefined, string | undefined]> = []
+    queryClient.setQueryData([key, 'first'], { value: 'first' })
+    queryClient.setQueryData([key, 'second'], { value: 'second' })
+
+    function Page() {
+      const [id, setId] = createSignal('first')
+      const state = useQuery(() => ({
+        queryKey: [key, id()],
+        queryFn: () => Promise.resolve({ value: id() }),
+        staleTime: Infinity,
+        reconcile: (oldData, newData) => {
+          inputs.push([oldData?.value, newData.value])
+          return newData
+        },
+      }))
+
+      return (
+        <div>
+          <button onClick={() => setId('second')}>change key</button>
+          <span>data: {state.data?.value}</span>
+        </div>
+      )
+    }
+
+    const rendered = renderWithClient(queryClient, () => <Page />)
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(rendered.getByText('data: first')).toBeInTheDocument()
+
+    fireEvent.click(rendered.getByRole('button', { name: 'change key' }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(rendered.getByText('data: second')).toBeInTheDocument()
+    expect(inputs).toStrictEqual([
+      ['first', 'first'],
+      [undefined, 'second'],
+    ])
+  })
+
+  it.each([
+    {
+      placeholderData: undefined,
+      pendingData: 'pending',
+      placeholderInputs: [],
+    },
+    {
+      placeholderData: keepPreviousData<{ value: string }>,
+      pendingData: 'first',
+      placeholderInputs: [[undefined, 'first']],
+    },
+  ])(
+    'should reconcile only defined data for the current key with $pendingData while loading',
+    async ({ placeholderData, pendingData, placeholderInputs }) => {
+      const key = queryKey()
+      const inputs: Array<[string | undefined, string | undefined]> = []
+
+      function Page() {
+        const [id, setId] = createSignal('first')
+        const state = useQuery<{ value: string }>(() => ({
+          queryKey: [key, id()],
+          queryFn: () => {
+            const value = id()
+            return sleep(10).then(() => ({ value }))
+          },
+          placeholderData,
+          reconcile: (oldData, newData) => {
+            inputs.push([oldData?.value, newData.value])
+            return newData
+          },
+        }))
+
+        return (
+          <div>
+            <button onClick={() => setId('second')}>change key</button>
+            <span>data: {state.data?.value ?? 'pending'}</span>
+          </div>
+        )
+      }
+
+      const rendered = renderWithClient(queryClient, () => <Page />)
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(rendered.getByText('data: first')).toBeInTheDocument()
+
+      fireEvent.click(rendered.getByRole('button', { name: 'change key' }))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(rendered.getByText(`data: ${pendingData}`)).toBeInTheDocument()
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(rendered.getByText('data: second')).toBeInTheDocument()
+      expect(inputs).toStrictEqual([
+        [undefined, 'first'],
+        ...placeholderInputs,
+        [undefined, 'second'],
+      ])
+    },
+  )
+
+  it('should isolate string-key reconciliation when switching cached queries', async () => {
+    const key = queryKey()
+    const states: Array<{ id: string; value: string }> = []
+    queryClient.setQueryData([key, 'first'], { id: 'shared', value: 'first' })
+    queryClient.setQueryData([key, 'second'], { id: 'shared', value: 'second' })
+
+    function Page() {
+      const [id, setId] = createSignal('first')
+      const state = useQuery(() => ({
+        queryKey: [key, id()],
+        queryFn: () => Promise.resolve({ id: 'shared', value: id() }),
+        staleTime: Infinity,
+        reconcile: 'id',
+      }))
+
+      createEffect(() => {
+        if (state.data) states.push(state.data)
+      })
+
+      return (
+        <div>
+          <button onClick={() => setId('second')}>change key</button>
+          <span>data: {state.data?.value}</span>
+        </div>
+      )
+    }
+
+    const rendered = renderWithClient(queryClient, () => <Page />)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(rendered.getByText('data: first')).toBeInTheDocument()
+
+    fireEvent.click(rendered.getByRole('button', { name: 'change key' }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(rendered.getByText('data: second')).toBeInTheDocument()
+    expect(states[0]).toStrictEqual({ id: 'shared', value: 'first' })
+    expect(states.at(-1)).toStrictEqual({ id: 'shared', value: 'second' })
+    expect(queryClient.getQueryData([key, 'first'])).toStrictEqual({
+      id: 'shared',
+      value: 'first',
+    })
+  })
+
   it('should share equal data structures between query results', async () => {
     const key = queryKey()
     const result1 = [
