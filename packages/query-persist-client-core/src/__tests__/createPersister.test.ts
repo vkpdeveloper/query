@@ -622,6 +622,32 @@ describe('createPersister', () => {
   })
 
   describe('persisterGc', () => {
+    it.each(['not-json{', 'null', '{}', '{"state":null}'])(
+      'should remove malformed entry %s and continue garbage collection',
+      async (malformedEntry) => {
+        const storage = getFreshStorage()
+        const { persister, client, queryKey, storageKey } = setupPersister(
+          ['foo'],
+          { storage },
+        )
+        const malformedKey = `${PERSISTER_KEY_PREFIX}-malformed`
+        const expiredKey = ['expired']
+
+        await storage.setItem(malformedKey, malformedEntry)
+        client.setQueryData(queryKey, null)
+        await persister.persistQueryByKey(queryKey, client)
+        const persistedData = await storage.getItem(storageKey)
+        client.setQueryData(expiredKey, 'expired', { updatedAt: 1 })
+        await persister.persistQueryByKey(expiredKey, client)
+
+        await expect(persister.persisterGc()).resolves.toBeUndefined()
+
+        await expect(storage.entries()).resolves.toStrictEqual([
+          [storageKey, persistedData],
+        ])
+      },
+    )
+
     it('should properly clean storage from busted entries', async () => {
       const storage = getFreshStorage()
       const { persister, client, query, queryKey } = setupPersister(['foo'], {
@@ -671,6 +697,36 @@ describe('createPersister', () => {
   })
 
   describe('restoreQueries', () => {
+    it.each(['not-json{', 'null', '{}', '{"state":null}'])(
+      'should remove malformed entry %s and restore the following query with null data',
+      async (malformedEntry) => {
+        const storage = getFreshStorage()
+        const { persister, client, queryKey, storageKey } = setupPersister(
+          ['foo'],
+          { storage },
+        )
+        const malformedKey = `${PERSISTER_KEY_PREFIX}-malformed`
+        const dataUpdatedAt = Date.now() - 1000
+
+        await storage.setItem(malformedKey, malformedEntry)
+        client.setQueryData(queryKey, null, { updatedAt: dataUpdatedAt })
+        await persister.persistQueryByKey(queryKey, client)
+        const persistedData = await storage.getItem(storageKey)
+        client.clear()
+
+        await expect(persister.restoreQueries(client)).resolves.toBeUndefined()
+
+        await expect(storage.entries()).resolves.toStrictEqual([
+          [storageKey, persistedData],
+        ])
+        expect(client.getQueryCache().getAll()).toHaveLength(1)
+        expect(client.getQueryData(queryKey)).toBeNull()
+        expect(client.getQueryState(queryKey)?.dataUpdatedAt).toBe(
+          dataUpdatedAt,
+        )
+      },
+    )
+
     it('should properly clean storage from busted entries', async () => {
       const storage = getFreshStorage()
       const { persister, client, query, queryKey } = setupPersister(['foo'], {
