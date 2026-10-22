@@ -154,8 +154,10 @@ export function experimental_createQueryPersister<TStorageValue = string>({
    * @returns `true` if it has no `dataUpdatedAt`, is older than `maxAge`, or has a different
    * `buster`.
    */
-  function isExpiredOrBusted(persistedQuery: PersistedQuery) {
-    if (persistedQuery.state.dataUpdatedAt) {
+  function isExpiredOrBusted(
+    persistedQuery: Partial<PersistedQuery> | null | undefined,
+  ) {
+    if (persistedQuery?.state?.dataUpdatedAt) {
       const queryAge = Date.now() - persistedQuery.state.dataUpdatedAt
       const expired = queryAge > maxAge
       const busted = persistedQuery.buster !== buster
