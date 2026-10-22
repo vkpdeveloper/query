@@ -6,13 +6,13 @@ import { useQueryClient } from './QueryClientProvider'
 import type { QueryClient, QueryFilters } from '@tanstack/query-core'
 
 /**
- * The `useIsFetching` hook returns the `number` of the queries that your application is loading or fetching in
+ * By default, `useIsFetching` returns the `number` of queries that your application is loading or fetching in
  * the background (useful for app-wide loading indicators).
- * @param filters - The {@link QueryFilters} to narrow down the matched queries.
+ * @param filters - The {@link QueryFilters} to narrow down the matched queries. Set `fetchStatus` to `'paused'`
+ * or `'idle'` to count queries in that status. An omitted or `undefined` `fetchStatus` defaults to `'fetching'`.
  * @param queryClient - Use this to use a custom `QueryClient`. Otherwise, the one from the nearest context will
  * be used.
- * @returns Will be the `number` of the queries that your application is currently loading or fetching in the
- * background.
+ * @returns The `number` of queries matching the filters and the selected fetch status.
  * @example
  * ```tsx
  * import { useIsFetching } from '@tanstack/react-query'

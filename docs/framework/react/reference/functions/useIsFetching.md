@@ -13,7 +13,7 @@ function useIsFetching(filters?: QueryFilters<readonly unknown[]>, queryClient?:
 
 Defined in: [packages/react-query/src/useIsFetching.ts:41](https://github.com/TanStack/query/blob/main/packages/react-query/src/useIsFetching.ts#L41)
 
-The `useIsFetching` hook returns the `number` of the queries that your application is loading or fetching in
+By default, `useIsFetching` returns the `number` of queries that your application is loading or fetching in
 the background (useful for app-wide loading indicators).
 
 ## Parameters
@@ -22,7 +22,8 @@ the background (useful for app-wide loading indicators).
 
 [`QueryFilters`](../interfaces/QueryFilters.md)\<readonly `unknown`[]\>
 
-The [QueryFilters](../interfaces/QueryFilters.md) to narrow down the matched queries.
+The [QueryFilters](../interfaces/QueryFilters.md) to narrow down the matched queries. Set `fetchStatus` to `'paused'`
+or `'idle'` to count queries in that status. An omitted or `undefined` `fetchStatus` defaults to `'fetching'`.
 
 <a id="filters-properties"></a>
 
@@ -48,8 +49,7 @@ be used.
 
 `number`
 
-Will be the `number` of the queries that your application is currently loading or fetching in the
-background.
+The `number` of queries matching the filters and the selected fetch status.
 
 ## Examples
 
