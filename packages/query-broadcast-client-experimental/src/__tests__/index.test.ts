@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/query-core'
+import { QueryClient, QueryObserver } from '@tanstack/query-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { queryKey, sleep } from '@tanstack/query-test-utils'
 import { broadcastQueryClient } from '..'
@@ -184,11 +184,174 @@ describe('broadcastQueryClient', () => {
         type: 'added',
         queryHash: existingQuery.queryHash,
         queryKey: existingKey,
-        state: { status: 'success', data: { value: 'from other tab' } },
+        state: {
+          status: 'success',
+          data: { value: 'from other tab' },
+          dataUpdatedAt: Date.now(),
+          errorUpdatedAt: 0,
+        },
       })
       expect(queryClient.getQueryData(existingKey)).toStrictEqual({
         value: 'from other tab',
       })
+    })
+
+    it('should preserve an observed error when another client broadcasts an empty "added" state', async () => {
+      const existingKey = queryKey()
+      const error = new Error('down')
+      const queryFn = vi.fn<() => Promise<never>>().mockRejectedValue(error)
+      const stopReceiving = broadcastQueryClient({ queryClient })
+      const receivingChannel = lastCreatedChannel
+      const observer = new QueryObserver(queryClient, {
+        queryKey: existingKey,
+        queryFn,
+        retry: false,
+      })
+      const unsubscribe = observer.subscribe(vi.fn())
+      const sender = new QueryClient()
+      const stopSending = broadcastQueryClient({ queryClient: sender })
+
+      try {
+        await vi.waitFor(() => {
+          expect(observer.getCurrentResult().isError).toBe(true)
+        })
+        const existingQuery = queryCache.find({ queryKey: existingKey })!
+        const errorState = existingQuery.state
+        expect(errorState.errorUpdatedAt).toBeGreaterThan(0)
+        mockPostMessage.mockClear()
+
+        sender.getQueryCache().build(sender, { queryKey: existingKey })
+        expect(mockPostMessage).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            type: 'added',
+            queryKey: existingKey,
+            state: expect.objectContaining({
+              status: 'pending',
+              fetchStatus: 'idle',
+              dataUpdatedAt: 0,
+              errorUpdatedAt: 0,
+            }),
+          }),
+        )
+        receivingChannel.onmessage?.(mockPostMessage.mock.calls[0]![0])
+
+        expect(observer.getCurrentResult()).toMatchObject({
+          status: 'error',
+          fetchStatus: 'idle',
+          error,
+          isPending: false,
+        })
+        expect(existingQuery.state).toBe(errorState)
+        expect(queryFn).toHaveBeenCalledTimes(1)
+        expect(mockPostMessage).toHaveBeenCalledTimes(1)
+      } finally {
+        unsubscribe()
+        stopReceiving()
+        stopSending()
+        queryClient.clear()
+        sender.clear()
+      }
+    })
+
+    it('should preserve an ongoing fetch when an empty "added" state arrives', () => {
+      const existingKey = queryKey()
+      const stopReceiving = broadcastQueryClient({ queryClient })
+      const observer = new QueryObserver(queryClient, {
+        queryKey: existingKey,
+        queryFn: () => new Promise<string>(() => {}),
+      })
+      const unsubscribe = observer.subscribe(vi.fn())
+      const sender = new QueryClient()
+
+      try {
+        const existingQuery = queryCache.find({ queryKey: existingKey })!
+        const fetchingState = existingQuery.state
+        expect(fetchingState.fetchStatus).toBe('fetching')
+        const incomingQuery = sender.getQueryCache().build(sender, {
+          queryKey: existingKey,
+        })
+
+        lastCreatedChannel.onmessage?.({
+          type: 'added',
+          queryHash: incomingQuery.queryHash,
+          queryKey: existingKey,
+          state: incomingQuery.state,
+        })
+
+        expect(observer.getCurrentResult().isFetching).toBe(true)
+        expect(existingQuery.state).toBe(fetchingState)
+      } finally {
+        unsubscribe()
+        stopReceiving()
+        queryClient.clear()
+        sender.clear()
+      }
+    })
+
+    it('should adopt a settled error from an "added" message for an existing query without data', async () => {
+      const existingKey = queryKey()
+      const error = new Error('down')
+      const sender = new QueryClient()
+      const stopReceiving = broadcastQueryClient({ queryClient })
+
+      try {
+        const existingQuery = queryCache.build(queryClient, {
+          queryKey: existingKey,
+        })
+        await expect(
+          sender.query({
+            queryKey: existingKey,
+            queryFn: () => Promise.reject(error),
+            retry: false,
+          }),
+        ).rejects.toBe(error)
+        const incomingQuery = sender.getQueryCache().find({
+          queryKey: existingKey,
+        })!
+        expect(incomingQuery.state.dataUpdatedAt).toBe(0)
+        expect(incomingQuery.state.errorUpdatedAt).toBeGreaterThan(0)
+
+        lastCreatedChannel.onmessage?.({
+          type: 'added',
+          queryHash: incomingQuery.queryHash,
+          queryKey: existingKey,
+          state: incomingQuery.state,
+        })
+
+        expect(existingQuery.state).toStrictEqual(incomingQuery.state)
+      } finally {
+        stopReceiving()
+        queryClient.clear()
+        sender.clear()
+      }
+    })
+
+    it('should build a missing query from an empty "added" state', () => {
+      const key = queryKey()
+      const sender = new QueryClient()
+      const stopReceiving = broadcastQueryClient({ queryClient })
+
+      try {
+        const incomingQuery = sender.getQueryCache().build(sender, {
+          queryKey: key,
+        })
+        expect(queryCache.find({ queryKey: key })).toBeUndefined()
+
+        lastCreatedChannel.onmessage?.({
+          type: 'added',
+          queryHash: incomingQuery.queryHash,
+          queryKey: key,
+          state: incomingQuery.state,
+        })
+
+        expect(queryCache.find({ queryKey: key })?.state).toStrictEqual(
+          incomingQuery.state,
+        )
+      } finally {
+        stopReceiving()
+        queryClient.clear()
+        sender.clear()
+      }
     })
   })
 
